@@ -7,7 +7,7 @@
 | 工具 | 作用 |
 |---|---|
 | `agent_bus_post(to, text)` | 送一条消息进另一个**存活会话**的下一次模型步（running → `agent.inject`，idle → `agent.followup`） |
-| `agent_bus_inbox()` | 列出可投递的存活会话、自己的 session id、本会话收到的留言 |
+| `agent_bus_inbox()` | 列出可投递的存活会话（**会话标题** + 4 字符标记）、本会话的标题与标记、以及收到的留言 |
 
 机制、边界、防对喷规则见 [docs/DETAIL.md](docs/DETAIL.md)；实测记录见仓库外的 `agent-bus-selftest.md`。
 
