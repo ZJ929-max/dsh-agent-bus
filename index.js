@@ -487,6 +487,8 @@ function deliver(agent, record) {
 export function apply(ctx) {
   /** `sender>peer` -> { depth, woken }; reloaded from disk so a reload does not reset every budget */
   const chain = new Map(Object.entries(loadPairs()))
+  // Prove the mirror is writable now, so a later failed write is a real event.
+  savePairs(chain)
 
   // A real human prompt in a session ends every automatic reply chain it owns.
   ctx.on('session/event', (session, event) => {
