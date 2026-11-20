@@ -8,6 +8,7 @@
 |---|---|
 | `agent_bus_post(to, text)` | 送一条消息进另一个**存活会话**的下一次模型步（running → `agent.inject`，idle → `agent.followup`） |
 | `agent_bus_inbox()` | 列出可投递的存活会话（**会话标题** + 4 字符标记）、本会话的标题与标记、以及收到的留言 |
+| `agent_bus_status(peer?, limit?)` | 看别人的状态：标题、running/idle、第几轮/该轮是否还在跑、最后一次活动距今多久、上下文占用百分比、你与它这一轮还能不能再发；给 `peer` 时输出单个会话的详情（含它最后一句和它发给你的最近几条） |
 
 机制、边界、防对喷规则见 [docs/DETAIL.md](docs/DETAIL.md)；实测记录见仓库外的 `agent-bus-selftest.md`。
 
