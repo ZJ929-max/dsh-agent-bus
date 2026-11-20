@@ -5,6 +5,8 @@
   "type": "module",
   "description": "Cross-session messaging inside one DSH profile: agent_bus_post / agent_bus_inbox.",
   "license": "MPL-2.0",
+  "repository": { "type": "git", "url": "git+https://github.com/ZJ929-max/dsh-agent-bus.git" },
+  "homepage": "https://github.com/ZJ929-max/dsh-agent-bus#readme",
   "exports": {
     ".": "./index.js",
     "./locale/*.json": "./locale/*.json",

@@ -41,3 +41,5 @@ plugin_manager install_bundle target="<这个目录的绝对路径>"
 
 本包是「DSH 插件整合包」的成员之一：整合包只做**元包 + 索引**（一次装齐 / 按需单装），
 每个插件保持独立包、独立仓库、独立版本，代码不合并。
+
+仓库：<https://github.com/ZJ929-max/dsh-agent-bus>（索引 <https://github.com/ZJ929-max/dsh-plugins> 按 commit 钉住版本）。
