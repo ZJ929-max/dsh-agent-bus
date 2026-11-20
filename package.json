@@ -1,5 +1,5 @@
 {
-  "name": "@local/agent-bus",
+  "name": "dsh-agent-bus",
   "version": "1.0.0",
   "private": true,
   "type": "module",

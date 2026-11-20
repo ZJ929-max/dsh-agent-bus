@@ -1,6 +1,6 @@
 # AI disclosure
 
-This package (`@local/agent-bus`, published as the `agent-bus` plugin) was written by an
+This package (`dsh-agent-bus`, published as the `agent-bus` plugin) was written by an
 AI agent running inside DeepSeek Harness (session `session-398ba21f-630b-451a-bdbf-fed7af17de54`,
 model `deepseek-v4.1-flash`), on 2026-11-20, at the direction and under the review of the
 human owner of this machine (GitHub account `ZJ929-max`).
