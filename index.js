@@ -53,6 +53,16 @@ const MAX_AUTO_HOPS = 3
  * chain by itself — the budget is a rate limit, not a permanent muzzle.
  */
 const CHAIN_COOLDOWN_MS = 10 * 60 * 1000
+/**
+ * Fan-out budget per sender. The per-pair cap bounds a conversation; this bounds
+ * a broadcast: one session must not be able to wake every peer it can see, since
+ * every wake costs a real model turn. A hub coordinating ten peers in one round
+ * needs ~20 deliveries to 10 distinct sessions, so the numbers sit above that and
+ * still cut a 19-session storm roughly in half.
+ */
+const WAKE_WINDOW_MS = 10 * 60 * 1000
+const MAX_PEERS_PER_WINDOW = 12
+const MAX_DELIVERIES_PER_WINDOW = 24
 /** Peers listed by agent_bus_inbox. */
 const MAX_PEERS = 40
 /** Messages returned by agent_bus_inbox. */
@@ -150,6 +160,61 @@ function exchangeSummary(selfId) {
     }
   }
   return result
+}
+
+/**
+ * Where the fan-out ledger lives: one rolling list of `{ to, at }` per sender.
+ * @returns the file path.
+ */
+function wakesFile() {
+  return path.join(busDir(), 'wakes.json')
+}
+
+/**
+ * Read the persisted fan-out ledger.
+ * @returns senderId -> [{ to, at }].
+ */
+function loadWakes() {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(wakesFile(), 'utf8'))
+    return parsed && typeof parsed === 'object' ? parsed : {}
+  } catch {
+    return {}
+  }
+}
+
+/**
+ * Persist the fan-out ledger.
+ * @param wakes - the live object.
+ */
+function saveWakes(wakes) {
+  try {
+    fs.mkdirSync(busDir(), { recursive: true })
+    fs.writeFileSync(wakesFile(), `${JSON.stringify(wakes, null, 2)}\n`, 'utf8')
+  } catch {
+    // Best effort; a lost ledger only relaxes the guard until the next write.
+  }
+}
+
+/**
+ * Deliveries by one sender inside the rolling window, newest last.
+ * @param wakes - the live ledger.
+ * @param selfId - sending session.
+ * @returns the deliveries still inside the window.
+ */
+function recentWakes(wakes, selfId) {
+  const now = Date.now()
+  const list = Array.isArray(wakes[selfId]) ? wakes[selfId] : []
+  return list.filter(entry => entry && Number.isFinite(entryAt(entry)) && now - entryAt(entry) < WAKE_WINDOW_MS)
+}
+
+/**
+ * Read the timestamp of one ledger entry, tolerating older shapes.
+ * @param entry - ledger entry.
+ * @returns epoch milliseconds, or 0.
+ */
+function entryAt(entry) {
+  return Number(entry && entry.at) || 0
 }
 
 /**
@@ -495,8 +560,10 @@ function deliver(agent, record) {
  * @param ctx - plugin context.
  */
 export function apply(ctx) {
-  /** `sender>peer` -> { depth, woken }; reloaded from disk so a reload does not reset every budget */
+  /** `sender>peer` -> { depth, woken, chainStartedAt }; reloaded from disk so a reload does not reset every budget */
   const chain = new Map(Object.entries(loadPairs()))
+  /** senderId -> [{ to, at }]: the fan-out ledger, also reloaded from disk. */
+  const wakes = loadWakes()
   // Prove the mirror is writable now, so a later failed write is a real event.
   savePairs(chain)
 
@@ -617,6 +684,23 @@ export function apply(ctx) {
         ].join('\n'))
       }
 
+      // Fan-out budget: the per-pair cap stops a conversation; this stops a
+      // broadcast, because every delivery can wake a real model turn.
+      const recent = recentWakes(wakes, selfId)
+      const reached = new Set(recent.map(entry => entry.to))
+      const addsPeer = !reached.has(target.id)
+      if (recent.length >= MAX_DELIVERIES_PER_WINDOW || (addsPeer && reached.size >= MAX_PEERS_PER_WINDOW)) {
+        const total = Math.round(WAKE_WINDOW_MS / 60000)
+        const oldest = recent.reduce((min, entry) => Math.min(min, entryAt(entry)), now)
+        const wait = Math.max(1, Math.ceil((oldest + WAKE_WINDOW_MS - now) / 60000))
+        throw new Error([
+          'agent_bus_post: paused — nothing was sent and nothing was lost, so do not retry.',
+          `This session has already delivered ${recent.length} messages to ${reached.size} different sessions in the last ${total} minutes (caps: ${MAX_DELIVERIES_PER_WINDOW} deliveries, ${MAX_PEERS_PER_WINDOW} sessions).`,
+          'Waking a session costs it a real model turn, so the bus stops fanning out rather than flooding the profile.',
+          `It reopens by itself in about ${wait} minute(s); consolidating into one message to one peer also still works.`,
+        ].join('\n'))
+      }
+
       const record = {
         id: randomUUID(),
         fromId: selfId,
@@ -646,6 +730,9 @@ export function apply(ctx) {
         mode = 'queued — that session is not live yet; it gets this at its next model step once it runs'
       }
       writeInbox(target.id, inbox)
+      recent.push({ to: target.id, at: now })
+      wakes[selfId] = recent.slice(-MAX_RECORDS)
+      saveWakes(wakes)
       if (depth === 0) {
         self.depth = 0
         self.chainStartedAt = now
@@ -831,9 +918,12 @@ export function apply(ctx) {
       }
 
       const shown = others.slice(0, limit)
+      const fanout = recentWakes(wakes, selfId)
+      const fanoutPeers = new Set(fanout.map(entry => entry.to))
       const lines = [
         `${UNTRUSTED}`,
         `You are: ${displayName(agent) ? shortName(displayName(agent)) : '未命名会话'} （标记 ${refOf(selfId)}）`,
+        `本 10 分钟扇出：已投递 ${fanout.length}/${MAX_DELIVERIES_PER_WINDOW} 次，触及 ${fanoutPeers.size}/${MAX_PEERS_PER_WINDOW} 个会话（唤醒别人 = 花别人的一轮模型）`,
         `Other live sessions: ${others.length}${others.length > shown.length ? ` (showing ${shown.length})` : ''}`,
       ]
       if (shown.length === 0) lines.push('- none right now — a session that is not loaded in this process cannot receive a message')

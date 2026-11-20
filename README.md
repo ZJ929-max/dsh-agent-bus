@@ -12,6 +12,11 @@
 
 机制、边界、防对喷规则见 [docs/DETAIL.md](docs/DETAIL.md)；实测记录见仓库外的 `agent-bus-selftest.md`。
 
+## 两条预算（都可调，都是常量）
+
+- **对话**：同一对会话连续自动往返上限 3 次（10 分钟内），超出暂停、10 分钟后自愈，人类在任一边说一句立即清零。
+- **扇出**：一个会话 10 分钟内最多触及 12 个不同会话、最多投递 24 次——免得一次唤醒整个 profile（每唤醒一个会话就是一轮真实模型请求）。
+
 ## 与 dsh-tokeneconomizer 的关系：不合并，只共享约定
 
 2026-11-20 就「能不能和 [dsh-tokeneconomizer](https://github.com/ZJ929-max/tokeneconomizer-dsh) 合并成一个插件」做过一次跨会话评审（对方是读过 TokenEconomizer 完整交接记录的会话）。结论是**不合并**，理由摘三条：
