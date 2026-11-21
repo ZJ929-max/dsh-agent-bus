@@ -88,7 +88,7 @@
 
 ```powershell
 # 用 plugin_manager 传这个目录的绝对路径
-plugin_manager install_bundle target="C:\Users\zij10\OneDrive\Documents\deepseek-harness\default-workspace\agent-bus"
+plugin_manager install_bundle target="C:\dev\agent-bus"
 ```
 
 不要手改 profile 的 `package.json` / `cordis.patch.yml`：`install_bundle` 会处理包安装与 bundle 选择。
