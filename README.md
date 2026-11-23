@@ -2,12 +2,12 @@
 
 让**同一个 DSH profile 里不同的会话互相留言**：A 发一句给 B，B 在下一次模型步看到并回一条，A 再看到回复。本机进程内，不是远程主机。
 
-两个工具（加载时注册一次，不按条件增删）：
+三个工具（加载时注册一次，不按条件增删）：
 
 | 工具 | 作用 |
 |---|---|
-| `agent_bus_post(to, text)` | 送一条消息进另一个**存活会话**的下一次模型步（running → `agent.inject`，idle → `agent.followup`）；同一对会话连续自动往返上限 3 次，超出暂停 10 分钟后自愈，人类发话立即重置 |
-| `agent_bus_inbox()` | 列出可投递的存活会话（**会话标题** + 4 字符标记）、本会话的标题与标记、以及收到的留言 |
+| `agent_bus_post(to, text, wake?)` | 送一条消息进另一个**存活会话**的下一次模型步（running → `agent.inject`，idle → `agent.followup`）；`wake:false` 只投递不唤醒。同一对会话连续自动往返上限 3 次，超出暂停 10 分钟后自愈，人类发话立即重置。返回 `ok / paused / messageId / n / mode / depth / retryAfterMinutes` |
+| `agent_bus_inbox({includeMessages?, unreadOnly?, ack?, message?})` | 列出可投递的存活会话（**会话标题** + 4 字符标记）、本会话的标题与标记、收到的留言（带编号 `#12` 与未读标记）。`ack:true` 推进读游标；`message:"12"` 按编号重读一条全文，不动游标 |
 | `agent_bus_status(peer?, limit?)` | 看别人的状态：标题、running/idle、第几轮/该轮是否还在跑、最后一次活动距今多久、上下文占用百分比、你与它这一轮还能不能再发；给 `peer` 时输出单个会话的详情（含它最后一句和它发给你的最近几条） |
 
 机制、边界、防对喷规则见 [docs/DETAIL.md](docs/DETAIL.md)；实测记录见仓库外的 `agent-bus-selftest.md`。
@@ -26,6 +26,7 @@
 | `wakeWindowMinutes` | 10 | 扇出预算窗口 |
 | `maxPeersPerWindow` | 12 | 窗口内最多触及多少个不同会话 |
 | `maxDeliveriesPerWindow` | 24 | 窗口内最多投递多少次 |
+| `retentionDays` | 7 | 已投递留言在镜像里保留几天（未投递的永不按时间删） |
 
 没有声明 Config schema：值在 `apply()` 里防御式读取，非法值静默回落到默认，不会让插件加载失败。
 `agent_bus_post` 的 `wake:false` 只投递不唤醒；被限速时**返回** `{ok:false, paused:true, retryAfterMinutes}`，不抛错——「停」不是失败，别重试。
@@ -40,9 +41,9 @@
 
 ### 共享的三条约定（不共享运行时）
 
-1. 任何进入上下文的东西都带**来源标记 + 不可信标签**（本插件：`[agent-bus] … UNTRUSTED DATA` 与 `--- begin/end verbatim message ---`）。
-2. 每次注入、每次止损都落一条**可审计记录**，并且能被工具查出来（本插件：`user/message` 的 `source.kind='agent-bus'` + `~/.dsh/agent-bus/inbox-<sessionId>.json` + `agent_bus_inbox`）。
-3. 阈值必须**有上限、可关、可解释**（本插件：`maxAutoHops` 默认 3、`chainCooldownMinutes` 默认 10、`maxPeersPerWindow` 12、`maxDeliveriesPerWindow` 24，均可在插件行 `config` 覆盖；`MAX_TEXT=4000`、`MAX_RECORDS=200` 为硬上限，全部写在 docs 里并出现在 `agent_bus_post` 的返回值与拒绝理由中）。
+1. 任何进入上下文的东西都带**来源标记 + 不可信标签**（本插件：`[agent-bus · UNTRUSTED: …]` 包头 + `[end agent-bus #n …]` 包尾，两行约 200 字符，不再附四条例行规则）。
+2. 每次注入、每次止损都落一条**可审计记录**，并且能被工具查出来（本插件：`user/message` 的 `source.kind='agent-bus'` + `<profile>/agent-bus/inbox-<sessionId>.json` + `agent_bus_inbox` 的编号/游标）。
+3. 阈值必须**有上限、可关、可解释**（本插件：`maxAutoHops` 默认 3、`chainCooldownMinutes` 默认 10、`maxPeersPerWindow` 12、`maxDeliveriesPerWindow` 24、`retentionDays` 7，均可在插件行 `config` 覆盖；`MAX_TEXT=4000`、`MAX_RECORDS=200` 为硬上限，全部写在 docs 里并出现在 `agent_bus_post` 的返回值与拒绝理由中）。
 
 ## 安装
 
