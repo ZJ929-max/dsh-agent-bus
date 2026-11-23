@@ -16,6 +16,9 @@ const here = path.dirname(fileURLToPath(import.meta.url))
 const root = path.resolve(here, '..')
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-bus-test-'))
 process.env.DSH_PROFILE_DIR = tmp
+// Keep the legacy shared directory inside the sandbox too, so a carry-over can
+// never copy the real profile's mail into the test run.
+process.env.DSH_HOME = tmp
 
 const { apply } = await import(pathToFileURL(path.join(root, 'index.js')).href)
 
@@ -288,6 +291,37 @@ await check('derived names are cached instead of re-reading a log per call (A11)
   await status.execute({}, { agent: a })
   const afterRetitle = registry.reduce((sum, agent) => sum + agent.calls.logReads, 0)
   assert.ok(afterRetitle > afterSecond, 'a session/title event must drop that session\'s cached name')
+})
+
+await check('the isolation switch moves legacy mail into the profile directory (A9)', async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-bus-home-'))
+  const saved = { home: process.env.DSH_HOME, dir: process.env.DSH_PROFILE_DIR, profile: process.env.DSH_PROFILE }
+  try {
+    process.env.DSH_HOME = home
+    process.env.DSH_PROFILE_DIR = path.join(home, 'profiles', 'desktop')
+    delete process.env.DSH_PROFILE
+    fs.mkdirSync(path.join(home, 'agent-bus'), { recursive: true })
+    fs.writeFileSync(path.join(home, 'agent-bus', 'inbox-session-legacy.json'), JSON.stringify([
+      { id: 'legacy', n: 1, fromId: 'session-x', toId: 'session-legacy', text: 'old', postedAt: new Date().toISOString(), delivered: true },
+    ]), 'utf8')
+
+    const tools = activate({})
+    await tools.get('agent_bus_status').execute({}, { agent: a })
+    const copied = path.join(home, 'profiles', 'desktop', 'agent-bus', 'inbox-session-legacy.json')
+    assert.ok(fs.existsSync(copied), 'legacy mail must be carried into the profile directory once')
+
+    const shared = activate({ isolateByProfile: false })
+    await shared.get('agent_bus_post').execute({ to: 'Receiver', text: 'shared' }, { agent: a })
+    assert.ok(
+      fs.existsSync(path.join(home, 'agent-bus', `inbox-${b.id}.json`)),
+      'with the integrated switch off the shared directory is used again',
+    )
+  } finally {
+    restoreEnv('DSH_HOME', saved.home)
+    restoreEnv('DSH_PROFILE_DIR', saved.dir)
+    restoreEnv('DSH_PROFILE', saved.profile)
+    fs.rmSync(home, { recursive: true, force: true })
+  }
 })
 
 console.log(`smoke: ${passed} checks passed`)

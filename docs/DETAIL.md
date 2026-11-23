@@ -38,6 +38,23 @@
 - **保留期**：镜像默认 7 天（`retentionDays`）。只按时间删**已投递**的；未投递的只在超过 200 条时按条数淘汰。会话日志仍是永久记录，镜像只保证「过一会儿还能重读」。
 - **包装**：包头一行 + `#n · 来源 · 时间` + 包尾一行，约 200 字符；四条例行规则压到两行，其余（怎么寻址、怎么回）留在工具描述里，一轮读一次而不是一条消息读一次。
 
+## 设置（1.3.0 起有 schema）
+
+`export const Config` 用官方 Schemastery 构造，所以插件行在设置界面里**自动生成**这些项，不用手改配置文件：
+
+| 键 | 默认 | 作用 |
+|---|---|---|
+| `isolateByProfile` | `true` | **整合开关**：信箱与限速账本按 profile 隔离；关掉 = 所有 profile 共用一份（1.2.0 及以前的行为） |
+| `profile` | `''` | 状态目录使用的 profile 名，自动识别不到时填（如 `desktop`） |
+| `maxAutoHops` | 3 | 同一对会话连续自动往返上限 |
+| `chainCooldownMinutes` | 10 | 超限后自动恢复的冷却 |
+| `wakeWindowMinutes` | 10 | 扇出预算窗口 |
+| `maxPeersPerWindow` | 12 | 窗口内最多触及多少个会话 |
+| `maxDeliveriesPerWindow` | 24 | 窗口内最多投递多少次 |
+| `retentionDays` | 7 | 已投递留言保留天数 |
+
+**为什么 `lib/schema.js` 要绕一圈**：本插件是本机目录 `link:` 安装的，代码真实路径在 profile 之外，裸 `import '@deepseek-ai/schemastery'` 会 `ERR_MODULE_NOT_FOUND`（已实测）；正式发布版装在 profile 内则能直接解析。所以先试裸导入，失败再从每个可见 profile 的 `node_modules` 里 `createRequire` 解析。两条都失败时 `Config` 导出 `undefined`，Cordis 视为「无 schema」，`apply()` 里的默认值照旧生效——**绝不能**用长得像 JSON Schema 的普通对象冒充，那会让插件「加载了但 apply 不跑」。
+
 ## 怎么送达
 
 走的是 `Agent` 公开接口，不是侧信道：
@@ -46,8 +63,9 @@
 - 目标会话空闲 → `agent.followup(message)`：唤醒一轮，这条消息就是该轮唯一的一条普通消息。
 - 两种情况都落进**目标自己的 session log**（`user/message`，`source.kind = 'agent-bus'`，`form = 'relay'`），所以持久记录仍然是会话日志。
 - 插件另外把每条消息写进 `<profile dir>/agent-bus/` 下的镜像，每个会话一个 `inbox-<sessionId>.json`。这份镜像有三个用途：`agent_bus_inbox` 的历史记录、极窄竞态下的补投（目标在寻址之后、投递之前被 dispose，`agent/created` 时会把未投递的记录 `inject` 进去，不唤醒）、以及编号重读。
-- 状态目录按 profile 解析，依次尝试：`DSH_PROFILE_DIR`（权威）→ `ctx.baseDir`（仅当它确实是 `<…>/profiles/<name>`）→ 插件行 `config.profile` → `DSH_HOME/profiles/<DSH_PROFILE>` → `DSH_HOME`（最后兜底，**不按 profile 隔离**）。走到最后一级时 `agent_bus_status` 会写明目录、来源和缺失的环境变量，不让两个 profile 静默共用一份信箱。
-- 实测（2026-11-23，desktop profile）：宿主进程**没有** `DSH_PROFILE_DIR` / `DSH_HOME` / `DSH_PROFILE`，`ctx.baseDir` 在 `ctx.inject(['baseDir'])` 作用域里也读不到（没有这个服务），所以本机实际落在 `~/.dsh/agent-bus` 并持续报警。要真隔离，给进程设 `DSH_PROFILE_DIR`，或在插件行 `config` 写 `profile: "desktop"`。
+- 状态目录按 profile 解析，依次尝试：**整合开关**（关 → 共用一份）→ `DSH_PROFILE_DIR` → `ctx.baseDir`（仅当它确实是 `<…>/profiles/<name>`）→ 插件设置里的 `profile` 名 → `DSH_HOME/profiles/<DSH_PROFILE>` → `DSH_HOME/profiles` 下唯一的那一个 profile 目录 → `DSH_HOME`（最后兜底，**不按 profile 隔离**）。走到最后一级时 `agent_bus_status` 会写明目录、来源和缺失的环境变量，不让两个 profile 静默共用一份信箱。
+- **一次性迁移**：当解析结果从共用目录变成 profile 目录时，把共用目录里的 `*.json` 复制到新目录（源目录不删）。实测本机：13 个文件、25 条留言原样可用。
+- 实测（2026-11-23，desktop profile）：宿主进程**没有** `DSH_PROFILE_DIR` / `DSH_HOME` / `DSH_PROFILE`，`ctx.baseDir` 在 `ctx.inject(['baseDir'])` 作用域里也读不到，所以靠「唯一 profile 目录」这一级完成隔离；一旦机器上出现第二个 profile，这一级会失效并重新报警，届时在设置里填 `profile` 名即可。
 - 目录里还有：`seq.json`（全局递增消息号）、`cursor-<sessionId>.json`（读游标）、`wakes.json`（扇出账本）、`pairs.json`（有向对预算）。
 
 ## 它做不到什么

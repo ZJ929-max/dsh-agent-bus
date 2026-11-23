@@ -17,19 +17,21 @@
 - **对话**：同一对会话连续自动往返上限 3 次（10 分钟内），超出暂停、10 分钟后自愈，人类在任一边说一句立即清零。
 - **扇出**：一个会话 10 分钟内最多触及 12 个不同会话、最多投递 24 次——免得一次唤醒整个 profile（每唤醒一个会话就是一轮真实模型请求）。
 
-## 配置（插件行 `config`，全部可选）
+## 配置（插件行 `config`，全部可选；1.3.0 起有 schema，设置界面会自动生成）
 
 | 键 | 默认 | 作用 |
 |---|---|---|
+| `isolateByProfile` | `true` | **整合开关**：信箱与限速账本按 profile 隔离；关掉则所有 profile 共用一份 |
+| `profile` | （空） | 状态目录使用的 profile 名；自动识别不到时填它 |
 | `maxAutoHops` | 3 | 同一对会话连续自动往返上限 |
 | `chainCooldownMinutes` | 10 | 超限后自动恢复的冷却分钟 |
 | `wakeWindowMinutes` | 10 | 扇出预算窗口 |
 | `maxPeersPerWindow` | 12 | 窗口内最多触及多少个不同会话 |
 | `maxDeliveriesPerWindow` | 24 | 窗口内最多投递多少次 |
 | `retentionDays` | 7 | 已投递留言在镜像里保留几天（未投递的永不按时间删） |
-| `profile` | （空） | 状态目录用哪个 profile 名；宿主进程不给 `DSH_PROFILE_DIR` 时用它做隔离 |
 
-没有声明 Config schema：值在 `apply()` 里防御式读取，非法值静默回落到默认，不会让插件加载失败。
+`export const Config` 用官方 Schemastery 构造；本机 `link:` 安装时裸导入解析不到，插件会改从 profile 的 `node_modules` 解析，两条都不通就退回「无 schema」（功能不受影响，只是设置界面不显示这些项）。
+值在 `apply()` 里同样防御式读取，非法值静默回落到默认，不会让插件加载失败。
 `agent_bus_post` 的 `wake:false` 只投递不唤醒；被限速时**返回** `{ok:false, paused:true, retryAfterMinutes}`，不抛错——「停」不是失败，别重试。
 
 ## 与 dsh-tokeneconomizer 的关系：不合并，只共享约定
