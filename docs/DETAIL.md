@@ -46,7 +46,8 @@
 - 目标会话空闲 → `agent.followup(message)`：唤醒一轮，这条消息就是该轮唯一的一条普通消息。
 - 两种情况都落进**目标自己的 session log**（`user/message`，`source.kind = 'agent-bus'`，`form = 'relay'`），所以持久记录仍然是会话日志。
 - 插件另外把每条消息写进 `<profile dir>/agent-bus/` 下的镜像，每个会话一个 `inbox-<sessionId>.json`。这份镜像有三个用途：`agent_bus_inbox` 的历史记录、极窄竞态下的补投（目标在寻址之后、投递之前被 dispose，`agent/created` 时会把未投递的记录 `inject` 进去，不唤醒）、以及编号重读。
-- 状态目录按 profile 解析，三级：`DSH_PROFILE_DIR`（权威）→ `DSH_HOME/profiles/<DSH_PROFILE>`（只给名字的启动器）→ `DSH_HOME`（最后兜底，**不按 profile 隔离**）。走到第三级时 `agent_bus_status` 会明确写出这一点，不让两个 profile 静默共用一份信箱。
+- 状态目录按 profile 解析，依次尝试：`DSH_PROFILE_DIR`（权威）→ `ctx.baseDir`（仅当它确实是 `<…>/profiles/<name>`）→ 插件行 `config.profile` → `DSH_HOME/profiles/<DSH_PROFILE>` → `DSH_HOME`（最后兜底，**不按 profile 隔离**）。走到最后一级时 `agent_bus_status` 会写明目录、来源和缺失的环境变量，不让两个 profile 静默共用一份信箱。
+- 实测（2026-11-23，desktop profile）：宿主进程**没有** `DSH_PROFILE_DIR` / `DSH_HOME` / `DSH_PROFILE`，`ctx.baseDir` 在 `ctx.inject(['baseDir'])` 作用域里也读不到（没有这个服务），所以本机实际落在 `~/.dsh/agent-bus` 并持续报警。要真隔离，给进程设 `DSH_PROFILE_DIR`，或在插件行 `config` 写 `profile: "desktop"`。
 - 目录里还有：`seq.json`（全局递增消息号）、`cursor-<sessionId>.json`（读游标）、`wakes.json`（扇出账本）、`pairs.json`（有向对预算）。
 
 ## 它做不到什么

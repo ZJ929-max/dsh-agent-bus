@@ -215,8 +215,13 @@ await check('the state directory follows the profile, never a silent shared fall
     await tools.get('agent_bus_post').execute({ to: 'Receiver', text: 'y' }, { agent: a })
     assert.ok(fs.existsSync(path.join(home, 'profiles', 'desktop', 'agent-bus', 'seq.json')), 'tier 2 directory was not used')
 
-    // Tier 3: no profile identity at all — shared, but reported, never hidden.
+    // Tier 3: no env at all, but the plugin row names the profile.
     delete process.env.DSH_PROFILE
+    tools = activate({ profile: 'work' })
+    await tools.get('agent_bus_post').execute({ to: 'Receiver', text: 'z' }, { agent: a })
+    assert.ok(fs.existsSync(path.join(home, 'profiles', 'work', 'agent-bus', 'seq.json')), 'config.profile tier was not used')
+
+    // Tier 5: no profile identity at all — shared, but reported, never hidden.
     tools = activate({})
     const status = await tools.get('agent_bus_status').execute({}, { agent: a })
     assert.match(status.summary, /没有按 profile 隔离/u)

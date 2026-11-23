@@ -27,6 +27,7 @@
 | `maxPeersPerWindow` | 12 | 窗口内最多触及多少个不同会话 |
 | `maxDeliveriesPerWindow` | 24 | 窗口内最多投递多少次 |
 | `retentionDays` | 7 | 已投递留言在镜像里保留几天（未投递的永不按时间删） |
+| `profile` | （空） | 状态目录用哪个 profile 名；宿主进程不给 `DSH_PROFILE_DIR` 时用它做隔离 |
 
 没有声明 Config schema：值在 `apply()` 里防御式读取，非法值静默回落到默认，不会让插件加载失败。
 `agent_bus_post` 的 `wake:false` 只投递不唤醒；被限速时**返回** `{ok:false, paused:true, retryAfterMinutes}`，不抛错——「停」不是失败，别重试。
