@@ -1,7 +1,7 @@
 {
   "meta": {
     "title": "Agent 总线",
-    "description": "让同一 profile 内的会话互相留言：agent_bus_post 把消息送进另一个存活会话的下一次模型步，agent_bus_inbox 列出对等会话与已收留言。跨会话文本一律标注为不可信数据，同一对手方最多只能未经请求地回一轮。",
+    "description": "让同一 profile 内的会话互相留言：agent_bus_post 把消息送进另一个存活会话的下一次模型步，agent_bus_inbox 列出对等会话与已收留言，agent_bus_status 显示每个对等会话在做什么。跨会话文本一律标注为不可信数据；同一对会话的连续自动往返默认限 3 跳 / 10 分钟，停够时间会自己恢复，被限速时返回 ok:false 而不是报错。",
     "detail": "docs/DETAIL.md"
   }
 }

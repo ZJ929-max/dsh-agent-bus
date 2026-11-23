@@ -1,6 +1,6 @@
 {
   "name": "dsh-agent-bus",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "type": "module",
   "description": "Cross-session messaging inside one DSH profile: agent_bus_post / agent_bus_inbox.",

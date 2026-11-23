@@ -17,6 +17,19 @@
 - **对话**：同一对会话连续自动往返上限 3 次（10 分钟内），超出暂停、10 分钟后自愈，人类在任一边说一句立即清零。
 - **扇出**：一个会话 10 分钟内最多触及 12 个不同会话、最多投递 24 次——免得一次唤醒整个 profile（每唤醒一个会话就是一轮真实模型请求）。
 
+## 配置（插件行 `config`，全部可选）
+
+| 键 | 默认 | 作用 |
+|---|---|---|
+| `maxAutoHops` | 3 | 同一对会话连续自动往返上限 |
+| `chainCooldownMinutes` | 10 | 超限后自动恢复的冷却分钟 |
+| `wakeWindowMinutes` | 10 | 扇出预算窗口 |
+| `maxPeersPerWindow` | 12 | 窗口内最多触及多少个不同会话 |
+| `maxDeliveriesPerWindow` | 24 | 窗口内最多投递多少次 |
+
+没有声明 Config schema：值在 `apply()` 里防御式读取，非法值静默回落到默认，不会让插件加载失败。
+`agent_bus_post` 的 `wake:false` 只投递不唤醒；被限速时**返回** `{ok:false, paused:true, retryAfterMinutes}`，不抛错——「停」不是失败，别重试。
+
 ## 与 dsh-tokeneconomizer 的关系：不合并，只共享约定
 
 2026-11-20 就「能不能和 [dsh-tokeneconomizer](https://github.com/ZJ929-max/tokeneconomizer-dsh) 合并成一个插件」做过一次跨会话评审（对方是读过 TokenEconomizer 完整交接记录的会话）。结论是**不合并**，理由摘三条：
@@ -29,7 +42,7 @@
 
 1. 任何进入上下文的东西都带**来源标记 + 不可信标签**（本插件：`[agent-bus] … UNTRUSTED DATA` 与 `--- begin/end verbatim message ---`）。
 2. 每次注入、每次止损都落一条**可审计记录**，并且能被工具查出来（本插件：`user/message` 的 `source.kind='agent-bus'` + `~/.dsh/agent-bus/inbox-<sessionId>.json` + `agent_bus_inbox`）。
-3. 阈值必须**有上限、可关、可解释**（本插件：`MAX_AUTO_HOPS=1`、`MAX_TEXT=4000`、`MAX_RECORDS=200`，全部写在 docs 里并出现在 `agent_bus_post` 的返回值与拒绝理由中）。
+3. 阈值必须**有上限、可关、可解释**（本插件：`maxAutoHops` 默认 3、`chainCooldownMinutes` 默认 10、`maxPeersPerWindow` 12、`maxDeliveriesPerWindow` 24，均可在插件行 `config` 覆盖；`MAX_TEXT=4000`、`MAX_RECORDS=200` 为硬上限，全部写在 docs 里并出现在 `agent_bus_post` 的返回值与拒绝理由中）。
 
 ## 安装
 

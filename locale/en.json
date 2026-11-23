@@ -1,7 +1,7 @@
 {
   "meta": {
     "title": "Agent bus",
-    "description": "Lets sessions in this profile leave each other messages: agent_bus_post delivers to another live session's next model step, agent_bus_inbox lists peers and received messages. Cross-session text is labelled untrusted data, and an agent may answer the same peer unprompted only once.",
+    "description": "Lets sessions in this profile leave each other messages: agent_bus_post delivers to another live session's next model step, agent_bus_inbox lists peers and received messages, and agent_bus_status shows what each peer is doing. Cross-session text is labelled untrusted data; consecutive automatic back-and-forth is rate-limited (3 rounds per 10 minutes by default) and reopens by itself, and a paused send returns ok:false instead of an error.",
     "detail": "docs/DETAIL.md"
   }
 }

@@ -97,4 +97,4 @@ plugin_manager install_bundle target="C:\dev\agent-bus"
 
 - 工具**只在插件加载时注册一次**，没有按条件增删，避免所有会话的提示词前缀缓存失效。
 - 不使用 `ctx.tools.restrict()`（它在 agent 作用域外会被拒），不用任何 npm 依赖，只用 Node 内置模块。
-- 一个会话对同一对手方「未经请求」的自动回复只放一条；这是 v1 的硬限制，写死在代码里（`MAX_AUTO_HOPS`），没有 Config 项。
+- 同一对会话的连续自动往返默认 **3 跳**，可通过插件行的 `config.maxAutoHops` 与 `config.chainCooldownMinutes` 调整；被限速时 `agent_bus_post` **返回** `{ok:false, paused:true, retryAfterMinutes}`，不抛错、不需要重试。
