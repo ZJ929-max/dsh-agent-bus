@@ -324,5 +324,74 @@ await check('the isolation switch moves legacy mail into the profile directory (
   }
 })
 
+await check('a short name is addressable and survives a retitle', async () => {
+  const tools = activate({})
+  const named = await tools.get('agent_bus_name').execute({ name: '小账房' }, { agent: b })
+  assert.equal(named.name, '小账房')
+  // The title still reads "Receiver": the name is the handle, the title the job.
+  const posted = await tools.get('agent_bus_post').execute({ to: '小账房', text: 'hi' }, { agent: a })
+  assert.equal(posted.ok, true)
+  assert.equal(b.calls.followup.length, 1)
+  // A retitle must not silently rename a peer other sessions already address.
+  const [event] = tools.handlers.get('session/event')
+  event({ id: b.id }, { type: 'session/title', data: { title: 'Something else entirely' } })
+  const again = await tools.get('agent_bus_post').execute({ to: '小账房', text: 'still you' }, { agent: a })
+  assert.equal(again.ok, true)
+  assert.equal(b.calls.followup.length, 2)
+})
+
+await check('names persist across activation and reject duplicates', async () => {
+  const first = activate({})
+  await first.get('agent_bus_name').execute({ name: '账房' }, { agent: b })
+  const reloaded = activate({})
+  const posted = await reloaded.get('agent_bus_post').execute({ to: '账房', text: 'after reload' }, { agent: a })
+  assert.equal(posted.ok, true)
+  await assert.rejects(
+    reloaded.get('agent_bus_name').execute({ name: '账房' }, { agent: c }),
+    /已被/u,
+  )
+})
+
+await check('a name is cut to the limit, and an empty one is refused', async () => {
+  const tools = activate({})
+  const long = await tools.get('agent_bus_name').execute({ name: '一二三四五六七八九十十一十二' }, { agent: b })
+  assert.equal(long.name.length, 12)
+  await assert.rejects(tools.get('agent_bus_name').execute({ name: '   ' }, { agent: b }), /1-12/u)
+})
+
+await check('the marker still disambiguates two sessions with the same name', async () => {
+  const tools = activate({})
+  await tools.get('agent_bus_name').execute({ name: '重名' }, { agent: b })
+  // Bypass the uniqueness check on purpose: the marker is the collision layer.
+  const namesPath = path.join(busDir, 'names.json')
+  const book = JSON.parse(fs.readFileSync(namesPath, 'utf8'))
+  book[c.id] = { name: '重名', at: Date.now() }
+  fs.writeFileSync(namesPath, JSON.stringify(book), 'utf8')
+  const reloaded = activate({})
+  await assert.rejects(reloaded.get('agent_bus_post').execute({ to: '重名', text: 'x' }, { agent: a }), /two sessions|several/u)
+  const byMarker = await reloaded.get('agent_bus_post').execute({ to: c.id.slice(-4), text: 'x' }, { agent: a })
+  assert.equal(byMarker.ok, true)
+})
+
+await check('clearing a name falls back to the title', async () => {
+  const tools = activate({})
+  await tools.get('agent_bus_name').execute({ name: '临时' }, { agent: b })
+  const cleared = await tools.get('agent_bus_name').execute({ clear: true }, { agent: b })
+  assert.equal(cleared.name, '')
+  const posted = await tools.get('agent_bus_post').execute({ to: 'Receiver', text: 'by title' }, { agent: a })
+  assert.equal(posted.ok, true)
+})
+
+await check('status and inbox show the name first, the job second', async () => {
+  const tools = activate({})
+  await tools.get('agent_bus_name').execute({ name: '小账房' }, { agent: b })
+  await tools.get('agent_bus_post').execute({ to: '小账房', text: 'hello' }, { agent: a })
+  const status = await tools.get('agent_bus_status').execute({}, { agent: a })
+  assert.match(status.summary, /小账房（标记/u)
+  assert.match(status.summary, /Receiver/u)
+  const inbox = await tools.get('agent_bus_inbox').execute({ includeMessages: false }, { agent: b })
+  assert.match(inbox.summary, /You are: 小账房/u)
+})
+
 console.log(`smoke: ${passed} checks passed`)
 fs.rmSync(tmp, { recursive: true, force: true })

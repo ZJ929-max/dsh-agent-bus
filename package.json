@@ -1,9 +1,9 @@
 {
   "name": "dsh-agent-bus",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "private": true,
   "type": "module",
-  "description": "Cross-session messaging inside one DSH profile: agent_bus_post / agent_bus_inbox / agent_bus_status.",
+  "description": "Cross-session messaging inside one DSH profile: agent_bus_post / agent_bus_inbox / agent_bus_status / agent_bus_name. Each session can carry a short name; the title states the job, the 4-character marker stays the collision layer.",
   "license": "MPL-2.0",
   "repository": { "type": "git", "url": "git+https://github.com/ZJ929-max/dsh-agent-bus.git" },
   "homepage": "https://github.com/ZJ929-max/dsh-agent-bus#readme",
