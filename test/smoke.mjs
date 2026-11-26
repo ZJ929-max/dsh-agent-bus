@@ -352,11 +352,13 @@ await check('names persist across activation and reject duplicates', async () =>
   )
 })
 
-await check('a name is cut to the limit, and an empty one is refused', async () => {
+await check('an over-long name is refused (never cut), and an empty one too', async () => {
   const tools = activate({})
-  const long = await tools.get('agent_bus_name').execute({ name: '一二三四五六七八九十十一十二' }, { agent: b })
-  assert.equal(long.name.length, 12)
-  await assert.rejects(tools.get('agent_bus_name').execute({ name: '   ' }, { agent: b }), /1-12/u)
+  const tooLong = '一'.repeat(33)
+  await assert.rejects(tools.get('agent_bus_name').execute({ name: tooLong }, { agent: b }), /33 个字符，上限 32/u)
+  const fits = await tools.get('agent_bus_name').execute({ name: '一'.repeat(32) }, { agent: b })
+  assert.equal(fits.name.length, 32)
+  await assert.rejects(tools.get('agent_bus_name').execute({ name: '   ' }, { agent: b }), /1-32/u)
 })
 
 await check('the marker still disambiguates two sessions with the same name', async () => {
@@ -382,13 +384,13 @@ await check('clearing a name falls back to the title', async () => {
   assert.equal(posted.ok, true)
 })
 
-await check('status and inbox show the name first, the job second', async () => {
+await check('a row is 名字（标记）· 状态 — the job title is not repeated', async () => {
   const tools = activate({})
   await tools.get('agent_bus_name').execute({ name: '小账房' }, { agent: b })
   await tools.get('agent_bus_post').execute({ to: '小账房', text: 'hello' }, { agent: a })
   const status = await tools.get('agent_bus_status').execute({}, { agent: a })
   assert.match(status.summary, /小账房（标记/u)
-  assert.match(status.summary, /Receiver/u)
+  assert.doesNotMatch(status.summary, /Receiver/u)
   const inbox = await tools.get('agent_bus_inbox').execute({ includeMessages: false }, { agent: b })
   assert.match(inbox.summary, /You are: 小账房/u)
 })

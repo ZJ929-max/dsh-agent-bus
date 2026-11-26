@@ -122,11 +122,13 @@ const RETENTION_MS = 7 * 24 * 60 * 60 * 1000
 /** How long a derived display name is reused before the log is read again. */
 const NAME_TTL_MS = 60 * 1000
 /**
- * Longest accepted short name (名字). A name is a handle people recognise in a
- * list; the session title stays the job description. Kept short so a listing
- * reads as `名字（标记） · 任务 · 状态` instead of a paragraph.
+ * Longest accepted short name (名字). 32 characters is enough for a CJK country
+ * name plus a qualifier — the old 12 silently cut names like
+ * 「阿斯达克自治苏维埃合众国 · 外交部」 down to a prefix, which read as "the name
+ * did not take effect". Names are now the session's identity, so they are not
+ * truncated: anything longer is refused and said so.
  */
-const MAX_NAME_CHARS = 12
+const MAX_NAME_CHARS = 32
 
 /**
  * Tunables that a deployment may change from the plugin row's `config`. Read
@@ -617,14 +619,15 @@ function saveNames(book) {
 }
 
 /**
- * Normalise a handle people can read in a list: single-line, trimmed, at most
- * `MAX_NAME_CHARS` characters (CJK counts as one character each).
+ * Normalise a handle people can read in a list: single-line and trimmed.
+ * It does NOT truncate: silently cutting a name is what made a 20-character
+ * name look like "nothing happened". Length is enforced by the caller, which
+ * can refuse and explain.
  * @param raw - caller-supplied name.
  * @returns the normalised name, or '' when nothing is left.
  */
 function normalizeHandle(raw) {
-  const text = String(raw ?? '').replace(/\s+/g, ' ').trim()
-  return text.length > MAX_NAME_CHARS ? text.slice(0, MAX_NAME_CHARS) : text
+  return String(raw ?? '').replace(/\s+/g, ' ').trim()
 }
 
 /**
@@ -867,15 +870,18 @@ function refOf(id) {
 }
 
 /**
- * Render one peer for text output: title first, status second, no UUID.
+ * Render one peer for text output: the session's handle and its marker.
+ *
+ * The job title is deliberately NOT repeated here: the name is the identity now
+ * (a listing reads `名字（标记） · 状态`), and two columns of prose per row was
+ * the "old two things" shape this replaced.
  * @param peer - peer entry.
  * @returns a one-line description.
  */
 function peerLine(peer) {
   const marker = refOf(peer.id)
   const handle = peer.name || (peer.title ? shortName(peer.title) : '未命名会话')
-  const job = peer.title && peer.title !== handle ? ` · ${shortName(peer.title)}` : ''
-  return `- ${handle}（${marker}）${job} · ${peer.status}`
+  return `- ${handle}（${marker}） · ${peer.status}`
 }
 
 /**
@@ -1662,8 +1668,7 @@ export function apply(ctx, config = {}) {
         ]
         if (percent !== null) parts.push(`上下文 ${percent}%`)
         const handle = peer.name || (peer.title ? shortName(peer.title) : `未命名会话 ${refOf(peer.id)}`)
-        const job = peer.title && peer.title !== handle ? `${shortName(peer.title)} · ` : ''
-        return `- ${handle}（标记 ${refOf(peer.id)}） · ${job}${parts.join(' · ')} · 与你的关系：${standing(peer.id)}`
+        return `- ${handle}（标记 ${refOf(peer.id)}） · ${parts.join(' · ')} · 与你的关系：${standing(peer.id)}`
       }
 
       const asked = String(args.peer ?? '').trim()
@@ -1772,6 +1777,9 @@ export function apply(ctx, config = {}) {
       }
       const next = normalizeHandle(args.name)
       if (!next) throw new Error(`agent_bus_name: \`name\` must be 1-${MAX_NAME_CHARS} characters (or pass clear:true).`)
+      if (next.length > MAX_NAME_CHARS) {
+        throw new Error(`agent_bus_name: 「${next}」是 ${next.length} 个字符，上限 ${MAX_NAME_CHARS}；名字不会被截断，请给一个更短的名字（或写成「主体 · 部门」这类缩写）。`)
+      }
       const clash = peersOf(ctx.agents, selfId).filter(peer => peer.name && peer.name.toLowerCase() === next.toLowerCase())
       if (clash.length > 0) {
         const other = clash[0]
