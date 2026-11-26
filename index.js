@@ -40,6 +40,7 @@ import { randomUUID } from 'node:crypto'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 import { buildConfig, SCHEMA_SOURCE } from './lib/schema.js'
 
@@ -222,14 +223,39 @@ function detectProfileDir(home) {
 }
 
 /**
+ * The profile directory this process actually loaded the plugin from, derived
+ * from the module's own location (`<…>/profiles/<name>/node_modules/…`).
+ *
+ * A pack install leaves a real copy inside the profile, so this is exact — it
+ * is the one identity the host never had to tell us. A linked/dev checkout
+ * lives outside `profiles/` and yields '', so the other tiers still decide.
+ * @returns the profile directory, or ''.
+ */
+function profileDirFromModule() {
+  try {
+    let dir = path.dirname(fileURLToPath(import.meta.url))
+    for (let step = 0; step < 8; step += 1) {
+      const parent = path.dirname(dir)
+      if (parent === dir) break
+      if (path.basename(parent) === 'profiles') return dir
+      dir = parent
+    }
+  } catch {
+    // Bundled or non-file module: no path identity to read.
+  }
+  return ''
+}
+
+/**
  * Locate this profile's state directory. Tiers, most authoritative first:
  *   1. the `isolateByProfile` switch, off → one shared directory on purpose.
  *   2. `DSH_PROFILE_DIR` — the per-profile directory a launcher hands us.
- *   3. `ctx.baseDir`, when it really is `<…>/profiles/<name>`.
- *   4. `config.profile` on the plugin row — isolation without touching the host.
- *   5. `DSH_HOME/profiles/<DSH_PROFILE>` — older launchers that set a name only.
- *   6. the only directory under `DSH_HOME/profiles` when exactly one exists.
- *   7. `DSH_HOME/agent-bus` — last resort. NOT profile-scoped: two profiles
+ *   3. the profile this module was loaded from (see `profileDirFromModule`).
+ *   4. `ctx.baseDir`, when it really is `<…>/profiles/<name>`.
+ *   5. `config.profile` on the plugin row — isolation without touching the host.
+ *   6. `DSH_HOME/profiles/<DSH_PROFILE>` — older launchers that set a name only.
+ *   7. the only directory under `DSH_HOME/profiles` when exactly one exists.
+ *   8. `DSH_HOME/agent-bus` — last resort. NOT profile-scoped: two profiles
  *      would read each other's mail, so `shared` is reported, never hidden.
  * @param ctx - plugin context, when one is available.
  * @returns the directory, whether it is shared, and which tier chose it.
@@ -239,6 +265,8 @@ function resolveBusDir(ctx) {
   if (!isolateByProfile) return { dir: path.join(home, 'agent-bus'), shared: true, source: '集成开关已关闭（共用一份）' }
   const explicit = process.env.DSH_PROFILE_DIR
   if (explicit) return { dir: path.join(explicit, 'agent-bus'), shared: false, source: 'DSH_PROFILE_DIR' }
+  const fromModule = profileDirFromModule()
+  if (fromModule) return { dir: path.join(fromModule, 'agent-bus'), shared: false, source: '插件所在 profile' }
   if (profileBaseDir) return { dir: path.join(profileBaseDir, 'agent-bus'), shared: false, source: 'ctx.baseDir' }
   if (configuredProfile) return { dir: path.join(home, 'profiles', safeId(configuredProfile), 'agent-bus'), shared: false, source: 'config.profile' }
   const profile = process.env.DSH_PROFILE
