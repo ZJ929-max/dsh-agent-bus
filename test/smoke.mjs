@@ -393,5 +393,49 @@ await check('status and inbox show the name first, the job second', async () => 
   assert.match(inbox.summary, /You are: 小账房/u)
 })
 
+await check('maxText: 0 removes the length cap instead of rejecting', async () => {
+  const tools = activate({ maxText: 0 })
+  const body = 'x'.repeat(9000)
+  const result = await tools.get('agent_bus_post').execute({ to: 'Receiver', text: body, wake: false }, { agent: a })
+  assert.equal(result.ok, true)
+  assert.equal(b.calls.inject.length, 1)
+
+  const strict = activate({})
+  await assert.rejects(strict.get('agent_bus_post').execute({ to: 'Receiver', text: body }, { agent: a }), /the limit is 4000/u)
+})
+
+await check('maxRecords: 0 keeps every message instead of trimming at 200', async () => {
+  const tools = activate({ maxRecords: 0, maxDeliveriesPerWindow: 100000, maxPeersPerWindow: 100000 })
+  for (let i = 0; i < 205; i += 1) {
+    await tools.get('agent_bus_post').execute({ to: 'Receiver', text: `m${i}`, wake: false }, { agent: a })
+  }
+  const file = JSON.parse(fs.readFileSync(path.join(busDir, `inbox-${b.id}.json`), 'utf8'))
+  assert.equal(file.length, 205)
+})
+
+await check('maxListed: 0 lists all mail while the default still truncates', async () => {
+  const tools = activate({ maxListed: 0, maxDeliveriesPerWindow: 100000, maxPeersPerWindow: 100000 })
+  for (let i = 0; i < 25; i += 1) {
+    await tools.get('agent_bus_post').execute({ to: 'Receiver', text: `n${i}`, wake: false }, { agent: a })
+  }
+  const all = await tools.get('agent_bus_inbox').execute({}, { agent: b })
+  assert.match(all.summary, /showing 25/u)
+
+  const capped = activate({ maxListed: 5 })
+  const five = await capped.get('agent_bus_inbox').execute({}, { agent: b })
+  assert.match(five.summary, /showing 5/u)
+})
+
+await check('maxPeers: 0 lists every peer, the default caps the list', async () => {
+  const one = activate({ maxPeers: 1 })
+  const s1 = await one.get('agent_bus_status').execute({}, { agent: a })
+  assert.match(s1.summary, /showing 1/u)
+
+  const unlimited = activate({ maxPeers: 0 })
+  const s2 = await unlimited.get('agent_bus_status').execute({}, { agent: a })
+  assert.match(s2.summary, /Other live sessions: 2/u)
+  assert.doesNotMatch(s2.summary, /showing/u)
+})
+
 console.log(`smoke: ${passed} checks passed`)
 fs.rmSync(tmp, { recursive: true, force: true })

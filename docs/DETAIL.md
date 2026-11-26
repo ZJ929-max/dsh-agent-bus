@@ -61,6 +61,10 @@
 | `maxPeersPerWindow` | 12 | 窗口内最多触及多少个会话 |
 | `maxDeliveriesPerWindow` | 24 | 窗口内最多投递多少次 |
 | `retentionDays` | 7 | 已投递留言保留天数 |
+| `maxText` | 4000 | 单条消息字符上限；`0` = 不限（不再报「超长」） |
+| `maxRecords` | 200 | 每个会话信箱保留条数；`0` = 不限 |
+| `maxListed` | 20 | inbox 列出条数；`0` = 全部列出 |
+| `maxPeers` | 40 | 对等会话列出个数；`0` = 全部列出 |
 
 **为什么 `lib/schema.js` 要绕一圈**：本插件是本机目录 `link:` 安装的，代码真实路径在 profile 之外，裸 `import '@deepseek-ai/schemastery'` 会 `ERR_MODULE_NOT_FOUND`（已实测）；正式发布版装在 profile 内则能直接解析。所以先试裸导入，失败再从每个可见 profile 的 `node_modules` 里 `createRequire` 解析。两条都失败时 `Config` 导出 `undefined`，Cordis 视为「无 schema」，`apply()` 里的默认值照旧生效——**绝不能**用长得像 JSON Schema 的普通对象冒充，那会让插件「加载了但 apply 不跑」。
 
@@ -138,5 +142,5 @@ plugin_manager install_bundle target="C:\dev\agent-bus"
 - 工具**只在插件加载时注册一次**，没有按条件增删，避免所有会话的提示词前缀缓存失效。
 - 不使用 `ctx.tools.restrict()`（它在 agent 作用域外会被拒），不用任何 npm 依赖，只用 Node 内置模块。
 - 同一对会话的连续自动往返默认 **3 跳**，可通过插件行的 `config.maxAutoHops` 与 `config.chainCooldownMinutes` 调整；被限速时 `agent_bus_post` **返回** `{ok:false, paused:true, retryAfterMinutes}`，不抛错、不需要重试。
-- 镜像里的留言默认保留 **7 天**（`config.retentionDays`），只按时间淘汰已投递的；未投递的不按时间删。
+- 镜像里的留言默认保留 **7 天**（`config.retentionDays`），只按时间淘汰已投递的；未投递的不按时间删。`maxRecords = 0` 时条数不封顶（时间仍在管）。
 - 显示名按会话缓存 60 秒（收到 `session/title` 事件立即失效），交换计数按 inbox 变更版本缓存：1.1.0 每次 `agent_bus_status` 都遍历每个会话的整篇事件日志，profile 一忙就明显变慢。

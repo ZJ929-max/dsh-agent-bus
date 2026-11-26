@@ -41,6 +41,10 @@
 | `maxPeersPerWindow` | 12 | 窗口内最多触及多少个不同会话 |
 | `maxDeliveriesPerWindow` | 24 | 窗口内最多投递多少次 |
 | `retentionDays` | 7 | 已投递留言在镜像里保留几天（未投递的永不按时间删） |
+| `maxText` | 4000 | 单条消息的字符上限；`0` = 不限 |
+| `maxRecords` | 200 | 每个会话信箱保留的条数；`0` = 不限 |
+| `maxListed` | 20 | `agent_bus_inbox` 一次列出多少条；`0` = 全部 |
+| `maxPeers` | 40 | 一次列出多少个对等会话；`0` = 全部 |
 
 `export const Config` 用官方 Schemastery 构造；本机 `link:` 安装时裸导入解析不到，插件会改从 profile 的 `node_modules` 解析，两条都不通就退回「无 schema」（功能不受影响，只是设置界面不显示这些项）。
 值在 `apply()` 里同样防御式读取，非法值静默回落到默认，不会让插件加载失败。
@@ -58,7 +62,7 @@
 
 1. 任何进入上下文的东西都带**来源标记 + 不可信标签**（本插件：`[agent-bus · UNTRUSTED: …]` 包头 + `[end agent-bus #n …]` 包尾，两行约 200 字符，不再附四条例行规则）。
 2. 每次注入、每次止损都落一条**可审计记录**，并且能被工具查出来（本插件：`user/message` 的 `source.kind='agent-bus'` + `<profile>/agent-bus/inbox-<sessionId>.json` + `agent_bus_inbox` 的编号/游标）。
-3. 阈值必须**有上限、可关、可解释**（本插件：`maxAutoHops` 默认 3、`chainCooldownMinutes` 默认 10、`maxPeersPerWindow` 12、`maxDeliveriesPerWindow` 24、`retentionDays` 7，均可在插件行 `config` 覆盖；`MAX_TEXT=4000`、`MAX_RECORDS=200` 为硬上限，全部写在 docs 里并出现在 `agent_bus_post` 的返回值与拒绝理由中）。
+3. 阈值必须**有上限、可关、可解释**（本插件：`maxAutoHops` 默认 3、`chainCooldownMinutes` 默认 10、`maxPeersPerWindow` 12、`maxDeliveriesPerWindow` 24、`retentionDays` 7，均可在插件行 `config` 覆盖；`maxText` / `maxRecords` / `maxListed` / `maxPeers` 默认有值但都可设为 `0`（不限），全部写在 docs 里并出现在 `agent_bus_post` 的返回值与拒绝理由中）。
 
 ## 安装
 
