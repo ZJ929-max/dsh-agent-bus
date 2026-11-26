@@ -247,15 +247,52 @@ function profileDirFromModule() {
 }
 
 /**
+ * The profile that DECLARES this package, found by reading each profile's
+ * `package.json`. A `link:` install leaves the module outside `profiles/`, so
+ * the module path says nothing — but only the profile that installed us lists
+ * our package name in its dependencies. Ambiguity (two profiles declaring the
+ * same plugin) yields '' so the caller falls through and reports the fallback.
+ * @param home - the DSH home directory.
+ * @returns the profile directory, or ''.
+ */
+function profileDirFromDeclarations(home) {
+  let own = ''
+  try {
+    const manifest = path.join(path.dirname(fileURLToPath(import.meta.url)), 'package.json')
+    own = JSON.parse(fs.readFileSync(manifest, 'utf8')).name || ''
+  } catch {
+    return ''
+  }
+  if (!own) return ''
+  const found = []
+  try {
+    for (const entry of fs.readdirSync(path.join(home, 'profiles'), { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue
+      const dir = path.join(home, 'profiles', entry.name)
+      try {
+        const declared = JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8')).dependencies || {}
+        if (Object.prototype.hasOwnProperty.call(declared, own)) found.push(dir)
+      } catch {
+        // A profile without a readable package.json declares nothing.
+      }
+    }
+  } catch {
+    return ''
+  }
+  return found.length === 1 ? found[0] : ''
+}
+
+/**
  * Locate this profile's state directory. Tiers, most authoritative first:
  *   1. the `isolateByProfile` switch, off → one shared directory on purpose.
  *   2. `DSH_PROFILE_DIR` — the per-profile directory a launcher hands us.
  *   3. the profile this module was loaded from (see `profileDirFromModule`).
- *   4. `ctx.baseDir`, when it really is `<…>/profiles/<name>`.
- *   5. `config.profile` on the plugin row — isolation without touching the host.
- *   6. `DSH_HOME/profiles/<DSH_PROFILE>` — older launchers that set a name only.
- *   7. the only directory under `DSH_HOME/profiles` when exactly one exists.
- *   8. `DSH_HOME/agent-bus` — last resort. NOT profile-scoped: two profiles
+ *   4. the profile whose `package.json` declares this package (link installs).
+ *   5. `ctx.baseDir`, when it really is `<…>/profiles/<name>`.
+ *   6. `config.profile` on the plugin row — isolation without touching the host.
+ *   7. `DSH_HOME/profiles/<DSH_PROFILE>` — older launchers that set a name only.
+ *   8. the only directory under `DSH_HOME/profiles` when exactly one exists.
+ *   9. `DSH_HOME/agent-bus` — last resort. NOT profile-scoped: two profiles
  *      would read each other's mail, so `shared` is reported, never hidden.
  * @param ctx - plugin context, when one is available.
  * @returns the directory, whether it is shared, and which tier chose it.
@@ -267,6 +304,8 @@ function resolveBusDir(ctx) {
   if (explicit) return { dir: path.join(explicit, 'agent-bus'), shared: false, source: 'DSH_PROFILE_DIR' }
   const fromModule = profileDirFromModule()
   if (fromModule) return { dir: path.join(fromModule, 'agent-bus'), shared: false, source: '插件所在 profile' }
+  const fromDeclaration = profileDirFromDeclarations(home)
+  if (fromDeclaration) return { dir: path.join(fromDeclaration, 'agent-bus'), shared: false, source: '声明了本插件的 profile' }
   if (profileBaseDir) return { dir: path.join(profileBaseDir, 'agent-bus'), shared: false, source: 'ctx.baseDir' }
   if (configuredProfile) return { dir: path.join(home, 'profiles', safeId(configuredProfile), 'agent-bus'), shared: false, source: 'config.profile' }
   const profile = process.env.DSH_PROFILE
